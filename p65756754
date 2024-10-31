@@ -1,0 +1,72 @@
+local PlaceID = game.PlaceId
+local AllIDs = {}
+local foundAnything = ""
+local actualHour = os.date("!*t").hour
+local Deleted = false
+local File = pcall(function()
+    AllIDs = game:GetService('HttpService'):JSONDecode(readfile("NotSameServers.json"))
+end)
+if not File then
+    table.insert(AllIDs, actualHour)
+    writefile("NotSameServers.json", game:GetService('HttpService'):JSONEncode(AllIDs))
+end
+
+function TPReturner()
+    local Site
+    if foundAnything == "" then
+        Site = game.HttpService:JSONDecode(game:HttpGet('https://games.roblox.com/v1/games/' .. PlaceID .. '/servers/Public?sortOrder=Desc&limit=100'))
+    else
+        Site = game.HttpService:JSONDecode(game:HttpGet('https://games.roblox.com/v1/games/' .. PlaceID .. '/servers/Public?sortOrder=Desc&limit=100&cursor=' .. foundAnything))
+    end
+    
+    local highestPlayerCount = 0
+    local bestServerID = ""
+    local ID = ""
+    if Site.nextPageCursor and Site.nextPageCursor ~= "null" and Site.nextPageCursor ~= nil then
+        foundAnything = Site.nextPageCursor
+    end
+    
+    for i, v in pairs(Site.data) do
+        local Possible = true
+        ID = tostring(v.id)
+        
+        -- Check if this server has open slots and a higher player count than the current best
+        if tonumber(v.maxPlayers) > tonumber(v.playing) and tonumber(v.playing) > highestPlayerCount then
+            for _, Existing in pairs(AllIDs) do
+                if ID == tostring(Existing) then
+                    Possible = false
+                    break
+                end
+            end
+            
+            -- Update best server ID if it passes checks
+            if Possible then
+                highestPlayerCount = tonumber(v.playing)
+                bestServerID = ID
+            end
+        end
+    end
+    
+    -- Teleport to the best server found with the highest player count
+    if bestServerID ~= "" then
+        table.insert(AllIDs, bestServerID)
+        pcall(function()
+            writefile("NotSameServers.json", game:GetService('HttpService'):JSONEncode(AllIDs))
+            game:GetService("TeleportService"):TeleportToPlaceInstance(PlaceID, bestServerID, game.Players.LocalPlayer)
+        end)
+    end
+end
+
+function Teleport()
+    while wait() do
+        pcall(function()
+            TPReturner()
+            if foundAnything ~= "" then
+                TPReturner()
+            end
+        end)
+    end
+end
+
+-- Start server hop
+Teleport()
